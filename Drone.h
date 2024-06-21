@@ -135,6 +135,10 @@ class Drone{
             deadBatteryTimestamp = currentTimestamp + 18000;
         }
 
+        void shutDown() {
+            active = false;
+        }
+
     private:
         std::vector<Point> path;
         int nextDestination = 0;
