@@ -50,8 +50,7 @@ void setDronesPathings(std::vector<Drone>* ptrToDrones) {
     Point center;
     center.x = 300;
     center.y = 300;
-    /*
-    */
+    
     for (int i = 1; i < 601; i+=2) {
         Point northern;
         Point southern;
@@ -138,19 +137,6 @@ void setDronesPathings(std::vector<Drone>* ptrToDrones) {
     }
 }
 
-
-
-/*
-int timeToCoverSquare(int side) {
-    int rowLength = side + 20;
-    int rows = (side / 20);
-    int meters = (rowLength) * (rows) + 20 * (rows - 1);
-
-    //printf("rowLength: %d\nrows %d\nmeters: %d\n", rowLength, rows, meters);
-    return timeToTravel(meters);
-}
-*/
-
 void setTimestamps(std::vector<int>* ptrToCheckTimestamps, int seconds) {
     const int timeLimit = seconds; //total amount of simulation time expressed in tenths of second
     int i = 1;
@@ -177,44 +163,6 @@ void setTimestamps(std::vector<int>* ptrToCheckTimestamps, int seconds) {
     std::sort((*ptrToCheckTimestamps).begin(), (*ptrToCheckTimestamps).end());
 }
 
-/*
-void visualizeDrones(std::vector<Drone>* ptrToDrones) {
-    for (Drone drone : (*ptrToDrones)) {
-        std::cout << "id: " << drone.getId() << ", x: " << drone.getX() << ", y: " << drone.getY() << std::endl; 
-    }
-}
-
-
-void travelDurationsTest() {
-    std::vector<Drone> drones;
-    std::vector<Drone>* ptrToDrones = &drones;
-    setDronesPathings(ptrToDrones);
-    bool res = true;
-    for (Drone drone : (*ptrToDrones)) {
-        std::vector<Point> dronePath = drone.getPath();
-        float totalTravelTime = 0;
-        int i = 0;
-        totalTravelTime += timeToTravel(300,300,1,0);
-        //std::cout << "drone " << drone.getId() << " segments: ";
-        while (i < dronePath.size() - 1) {
-            totalTravelTime += timeToTravel(dronePath[i].x, dronePath[i].y, dronePath[i+1].x, dronePath[i+1].y);
-            //std::cout << float(timeToTravel(dronePath[i].x, dronePath[i].y, dronePath[i+1].x, dronePath[i+1].y)) / 10 << ", ";
-            i++;
-        }
-        //std::cout << std::endl;
-        if (totalTravelTime > float(1800)) {
-            res = false;
-        }
-    }
-    if (res) {
-        std::cout << "PASS" << std::endl;
-    }
-    else {
-        std::cout << "FAIL" << std::endl;
-    }
-}
-*/
-
 void moveToStartingPositions(std::vector<Drone>* ptrToDrones) {
     while (true) {
         bool a = true;
@@ -232,6 +180,7 @@ void moveToStartingPositions(std::vector<Drone>* ptrToDrones) {
         }
     }
 }
+
 /*
 void visualizeIntVector(std::vector<int>* ptrToVector) {
     if ((*ptrToVector).size() == 0) {
