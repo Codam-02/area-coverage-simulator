@@ -11,6 +11,53 @@
 #include <chrono>
 #include <hiredis/hiredis.h>
 
+
+//The following three functions are defined as Redis Streams interaction functions
+
+// Function to connect to Redis
+redisContext* connectRedis(const char* hostname, int port) {
+    redisContext* context = redisConnect(hostname, port);
+    if (context == NULL || context->err) {
+        if (context) {
+            std::cerr << "Connection error: " << context->errstr << std::endl;
+            redisFree(context);
+        } else {
+            std::cerr << "Connection error: cannot allocate redis context" << std::endl;
+        }
+        exit(1);
+    }
+    return context;
+}
+
+// Function to add an entry to a stream
+void addEntry(redisContext* context, const char* stream, const char* key, const char* value) {
+    redisReply* reply = (redisReply*) redisCommand(context, "XADD %s * %s %s", stream, key, value);
+    if (reply == NULL) {
+        std::cerr << "Failed to add entry to stream" << std::endl;
+        return;
+    }
+    std::cout << "Added entry with ID: " << reply->str << std::endl;
+    freeReplyObject(reply);
+}
+
+// Function to read entries from a stream
+void readEntries(redisContext* context, const char* stream) {
+    redisReply* reply = (redisReply*) redisCommand(context, "XRANGE %s - +", stream);
+    if (reply == NULL) {
+        std::cerr << "Failed to read entries from stream" << std::endl;
+        return;
+    }
+    for (size_t i = 0; i < reply->elements; ++i) {
+        redisReply* entry = reply->element[i];
+        std::cout << "Entry ID: " << entry->element[0]->str << std::endl;
+        for (size_t j = 1; j < entry->element[1]->elements; j += 2) {
+            std::cout << " " << entry->element[1]->element[j]->str << ": " << entry->element[1]->element[j + 1]->str << std::endl;
+        }
+    }
+    freeReplyObject(reply);
+}
+
+
 int randomRechargingTime() {
     std::random_device rd;
     std::mt19937 gen(rd());
