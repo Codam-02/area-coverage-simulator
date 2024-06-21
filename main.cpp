@@ -9,6 +9,7 @@
 #include <cstring>
 #include <random>
 #include <chrono>
+#include <hiredis/hiredis.h>
 
 int randomRechargingTime() {
     std::random_device rd;
