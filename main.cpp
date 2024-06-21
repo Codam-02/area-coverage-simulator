@@ -367,6 +367,7 @@ void runSimulation(int seconds) {
             Drone& drone = drones[droneIndex];
             if (drone.getDeadBatteryTimestamp() != -1 && drone.getDeadBatteryTimestamp() < timeSinceStart) {
                 deadDrones.insert(droneIndex);
+                drone.shutDown();
             }
             if (!drone.isActive()) {
                 continue;
@@ -411,6 +412,14 @@ void runSimulation(int seconds) {
         timeSinceStart = checkTimestamps[0];
 
         if ((timeSinceStart - startingPositionsTimestamp) % 3000 == 0 && timeSinceStart != startingPositionsTimestamp) {
+            
+            /*
+                - Remove other dead drones checks
+                - Fetch all dead drones data
+                - Add all entries to Redis' "mystream"
+                - Read entries and call montior funtion
+            */
+
             std::cout << "Checking epoch " << epoch << "...\t";
             int errors = 0;
             for (int i = 0; i < 601; i++) {
