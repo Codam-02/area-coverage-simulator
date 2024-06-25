@@ -36,7 +36,7 @@ void addEntry(redisContext* context, const char* stream, const char* key, const 
         std::cerr << "Failed to add entry to stream" << std::endl;
         return;
     }
-    std::cout << "Added entry with ID: " << reply->str << std::endl;
+    //std::cout << "Added entry with ID: " << reply->str << std::endl;
     freeReplyObject(reply);
 }
 
@@ -276,6 +276,12 @@ void insertInSortedVector(std::vector<int>& vec, int num) {
 
 void runSimulation(int seconds) {
 
+    //const char* hostname = "127.0.0.1";  // Localhost IP address
+    //int port = 6379;                    // Default Redis port
+
+    //redisContext* ptrToRedisContext = connectRedis(const char* hostname, int port);
+    //const char* deadDronesStream = "dds";
+
     bool space[601][601];
     memset(space, false, sizeof(space));
 
@@ -365,8 +371,8 @@ void runSimulation(int seconds) {
         std::unordered_set<int> movingDrones = dronesToMove[timeSinceStart];
         for (int droneIndex : movingDrones) {
             Drone& drone = drones[droneIndex];
-            if (drone.getDeadBatteryTimestamp() != -1 && drone.getDeadBatteryTimestamp() < timeSinceStart) {
-                deadDrones.insert(droneIndex);
+            if (drone.getDeadBatteryTimestamp() != -1 && drone.getDeadBatteryTimestamp() <= timeSinceStart) {
+                //addEntry(ptrToRedisContext, deadDronesStream, const char* key, const char* value);
                 drone.shutDown();
             }
             if (!drone.isActive()) {
@@ -453,6 +459,6 @@ void runSimulation(int seconds) {
 
 
 int main() {
-    runSimulation(900);
+    runSimulation(3000);
     return 0;
 }
