@@ -36,56 +36,34 @@ void addEntry(redisContext* context, const char* stream, char* key, char* value)
         std::cerr << "Failed to add entry to stream" << std::endl;
         return;
     }
-    //std::cout << "Added entry with ID: " << reply->str << std::endl;
+    //std::cout << "Added entry with value: " << value << std::endl;
     freeReplyObject(reply);
 }
 
 // Function to read entries from a stream
-void readEntries(redisContext* context, const char* stream) {
+void readDeadDronesEntries(redisContext* context, const char* stream) {
     redisReply* reply = (redisReply*) redisCommand(context, "XRANGE %s - +", stream);
     if (reply == NULL) {
         std::cerr << "Failed to read entries from stream" << std::endl;
         return;
     }
+
     for (size_t i = 0; i < reply->elements; ++i) {
         redisReply* entry = reply->element[i];
-        std::cout << "Entry ID: " << entry->element[0]->str << std::endl;
-        for (size_t j = 1; j < entry->element[1]->elements; j += 2) {
-            std::cout << " " << entry->element[1]->element[j]->str << ": " << entry->element[1]->element[j + 1]->str << std::endl;
+
+        // Assuming each entry has one field-value pair
+        const char* field = entry->element[1]->element[0]->str;
+        const char* value = entry->element[1]->element[1]->str;
+
+        // Check if the value is "1"
+        if (strcmp(value, "1") == 0) {
+            std::cout << "Drone id " << field  << " battery dead" << std::endl;
         }
     }
+
+    (redisReply*) redisCommand(context, "DEL %s", stream);
     freeReplyObject(reply);
 }
-
-void readEntriesTest(redisContext* context, const char* stream) {
-    redisReply* reply = (redisReply*) redisCommand(context, "XRANGE %s - +", stream);
-    if (reply == NULL) {
-        std::cerr << "Failed to read entries from stream" << std::endl;
-        return;
-    }
-    for (size_t i = 0; i < reply->elements; ++i) {
-        redisReply* entry = reply->element[i];
-        bool hasValueOne = false;
-
-        // Check if any field has the value "1"
-        for (size_t j = 1; j < entry->element[1]->elements; j += 2) {
-            if (strcmp(entry->element[1]->element[j + 1]->str, "1") == 0) {
-                hasValueOne = true;
-                break;
-            }
-        }
-
-        // If the entry has a field with value "1", print the entry
-        if (hasValueOne) {
-            std::cout << "Entry ID: " << entry->element[0]->str << std::endl;
-            for (size_t j = 1; j < entry->element[1]->elements; j += 2) {
-                std::cout << " " << entry->element[1]->element[j]->str << ": " << entry->element[1]->element[j + 1]->str << std::endl;
-            }
-        }
-    }
-    freeReplyObject(reply);
-}
-
 
 //string manipulation function
 char* intToCharPtr(int num) {
@@ -498,11 +476,12 @@ void runSimulation(int seconds) {
             std::cout << "The number of drones at the end of epoch " << epoch << " is " << drones.size() << std::endl;
             if (deadDrones.size() > 0) {
                 std::cout << "ERROR: " << deadDrones.size() << " drones have died during coverage:" << std::endl;
-                readEntriesTest(ptrToRedisContext, deadDronesStream);
+                readDeadDronesEntries(ptrToRedisContext, deadDronesStream);
             }
             else {
                 std::cout << "No drones have died during coverage" << std::endl;
             }
+            deadDrones = {};
 
             std::cout << "\n\n" << std::endl;
             memset(space, false, sizeof(space));
