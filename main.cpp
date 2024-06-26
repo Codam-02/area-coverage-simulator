@@ -30,7 +30,7 @@ redisContext* connectRedis(const char* hostname, int port) {
 }
 
 // Function to add an entry to a stream
-void addEntry(redisContext* context, const char* stream, const char* key, const char* value) {
+void addEntry(redisContext* context, const char* stream, char* key, char* value) {
     redisReply* reply = (redisReply*) redisCommand(context, "XADD %s * %s %s", stream, key, value);
     if (reply == NULL) {
         std::cerr << "Failed to add entry to stream" << std::endl;
@@ -57,6 +57,45 @@ void readEntries(redisContext* context, const char* stream) {
     freeReplyObject(reply);
 }
 
+void readEntriesTest(redisContext* context, const char* stream) {
+    redisReply* reply = (redisReply*) redisCommand(context, "XRANGE %s - +", stream);
+    if (reply == NULL) {
+        std::cerr << "Failed to read entries from stream" << std::endl;
+        return;
+    }
+    for (size_t i = 0; i < reply->elements; ++i) {
+        redisReply* entry = reply->element[i];
+        bool hasValueOne = false;
+
+        // Check if any field has the value "1"
+        for (size_t j = 1; j < entry->element[1]->elements; j += 2) {
+            if (strcmp(entry->element[1]->element[j + 1]->str, "1") == 0) {
+                hasValueOne = true;
+                break;
+            }
+        }
+
+        // If the entry has a field with value "1", print the entry
+        if (hasValueOne) {
+            std::cout << "Entry ID: " << entry->element[0]->str << std::endl;
+            for (size_t j = 1; j < entry->element[1]->elements; j += 2) {
+                std::cout << " " << entry->element[1]->element[j]->str << ": " << entry->element[1]->element[j + 1]->str << std::endl;
+            }
+        }
+    }
+    freeReplyObject(reply);
+}
+
+
+//string manipulation function
+char* intToCharPtr(int num) {
+    std::string temp = std::to_string(num);
+    char* str = (char*)malloc((temp.length() + 1) * sizeof(char));
+    if (str != nullptr) {
+        strcpy(str, temp.c_str());
+    }
+    return str;
+}
 
 int randomRechargingTime() {
     std::random_device rd;
@@ -276,11 +315,11 @@ void insertInSortedVector(std::vector<int>& vec, int num) {
 
 void runSimulation(int seconds) {
 
-    //const char* hostname = "127.0.0.1";  // Localhost IP address
-    //int port = 6379;                    // Default Redis port
+    const char* hostname = "127.0.0.1";  // Localhost IP address
+    int port = 6379;                    // Default Redis port
 
-    //redisContext* ptrToRedisContext = connectRedis(const char* hostname, int port);
-    //const char* deadDronesStream = "dds";
+    redisContext* ptrToRedisContext = connectRedis(hostname, port);
+    const char* deadDronesStream = "dds";
 
     bool space[601][601];
     memset(space, false, sizeof(space));
@@ -291,6 +330,7 @@ void runSimulation(int seconds) {
     std::unordered_set<int> deadDrones = {};
     setDronesPathings(ptrToDrones);
     moveToStartingPositions(ptrToDrones);
+
 
     int startingPositionsTimestamp = (timeToTravel(300,300,1,0));
     int timeSinceStart = (timeToTravel(300,300,1,0));
@@ -371,8 +411,12 @@ void runSimulation(int seconds) {
         std::unordered_set<int> movingDrones = dronesToMove[timeSinceStart];
         for (int droneIndex : movingDrones) {
             Drone& drone = drones[droneIndex];
-            if (drone.getDeadBatteryTimestamp() != -1 && drone.getDeadBatteryTimestamp() <= timeSinceStart) {
-                //addEntry(ptrToRedisContext, deadDronesStream, const char* key, const char* value);
+            if (drone.getDeadBatteryTimestamp() != -1 && drone.getDeadBatteryTimestamp() <= timeSinceStart && (deadDrones.find(droneIndex) == deadDrones.end())) {
+                int id = drones[droneIndex].getId();
+                char* key = intToCharPtr(id);
+                char value[] = "1";
+                addEntry(ptrToRedisContext, deadDronesStream, key, value);
+                deadDrones.insert(droneIndex);
                 drone.shutDown();
             }
             if (!drone.isActive()) {
@@ -426,6 +470,16 @@ void runSimulation(int seconds) {
                 - Read entries and call montior funtion
             */
 
+            for (int i = 0; i < drones.size(); i++) {
+                if (deadDrones.find(i) != deadDrones.end()) {
+                    continue;
+                }
+                int id = drones[i].getId();
+                char* key = intToCharPtr(id);
+                char value[] = "0";
+                addEntry(ptrToRedisContext, deadDronesStream, key, value);
+            }
+
             std::cout << "Checking epoch " << epoch << "...\t";
             int errors = 0;
             for (int i = 0; i < 601; i++) {
@@ -443,8 +497,13 @@ void runSimulation(int seconds) {
             }
             std::cout << "The number of drones at the end of epoch " << epoch << " is " << drones.size() << std::endl;
             if (deadDrones.size() > 0) {
-                std::cout << deadDrones.size() << " drones have died during coverage." << std::endl;
+                std::cout << "ERROR: " << deadDrones.size() << " drones have died during coverage:" << std::endl;
+                readEntriesTest(ptrToRedisContext, deadDronesStream);
             }
+            else {
+                std::cout << "No drones have died during coverage" << std::endl;
+            }
+
             std::cout << "\n\n" << std::endl;
             memset(space, false, sizeof(space));
             epoch++;

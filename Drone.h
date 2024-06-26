@@ -131,8 +131,14 @@ class Drone{
         }
 
         void activate(int currentTimestamp) {
-            active = true;
-            deadBatteryTimestamp = currentTimestamp + 18000;
+            if (id == 0) {
+                active = true;
+                deadBatteryTimestamp = currentTimestamp + 16000;
+            }
+            else {
+                active = true;
+                deadBatteryTimestamp = currentTimestamp + 18000;
+            }
         }
 
         void shutDown() {
@@ -145,6 +151,6 @@ class Drone{
         int id;
         int x = 300;
         int y = 300;
-        bool active = true;
+        bool active = false;
         int deadBatteryTimestamp;
 };
