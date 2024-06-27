@@ -46,7 +46,8 @@ void addDeadDroneEntry(redisContext* context, const char* stream, char* key) {
 }
 
 // Function to read entries from a stream
-void readDeadDronesEntries(redisContext* context, const char* stream) {
+void readDeadDronesEntries(redisContext* context) {
+    char stream[] = "dds";
     redisReply* reply = (redisReply*) redisCommand(context, "XRANGE %s - +", stream);
     if (reply == NULL) {
         std::cerr << "Failed to read entries from stream" << std::endl;
@@ -480,12 +481,12 @@ void runSimulation(int seconds) {
                 std::cout << "All points are verified at epoch " << epoch  << ", time elapsed:\t" << (timeSinceStart) / 36000 << " hours\t" << ((timeSinceStart) % 36000) / 600 << " minutes\t" << float((timeSinceStart) % 600) / 10 << " seconds" << std::endl;
             }
             else {
-                std::cout << "ERROR: " << errors << " points were not verified at epoch " << epoch << std::endl;
+                std::cout << "ERROR: " << errors << " points were not verified at epoch " << epoch << ", time elapsed:\t" << (timeSinceStart) / 36000 << " hours\t" << std::endl;
             }
             std::cout << "The number of drones at the end of epoch " << epoch << " is " << drones.size() << std::endl;
             if (deadDrones.size() > 0) {
                 std::cout << "ERROR: " << deadDrones.size() << " drones have died during coverage:" << std::endl;
-                readDeadDronesEntries(ptrToRedisContext, deadDronesStream);
+                readDeadDronesEntries(ptrToRedisContext);
             }
             else {
                 std::cout << "No drones have died during coverage" << std::endl;

@@ -131,8 +131,18 @@ class Drone{
         }
 
         void activate(int currentTimestamp) {
-            active = true;
-            deadBatteryTimestamp = currentTimestamp + 18000;
+            if (id == 0 || id == 273 || id == 459) {
+                active = true;
+                deadBatteryTimestamp = currentTimestamp + 12000;
+            }
+            else if (id == 33 || id == 6 || id == 320) {
+                active = true;
+                deadBatteryTimestamp = currentTimestamp + 9000;
+            }
+            else {
+                active = true;
+                deadBatteryTimestamp = currentTimestamp + 18000;
+            }
         }
 
         void shutDown() {
