@@ -6,10 +6,6 @@
 class Drone{
     public:
 
-        //default constructor
-        //Drone () : id(-1) {}
-
-        //implemented constructor
         Drone (int _id, int _currentTimestamp) : id(_id), deadBatteryTimestamp(_currentTimestamp + 18000) {}
 
         int getX() {
@@ -67,7 +63,7 @@ class Drone{
             return path;
         }
 
-        int moveTowards(Point p) {
+        int moveTowards(Point p, int currentTimestamp) {
             bool a = false;
             bool b = false;
 
@@ -98,7 +94,8 @@ class Drone{
                     active = false;
                     nextDestination = 0;
                     deadBatteryTimestamp = -1;
-                    //std::cout << "drone " << getId() << " back to base" << std::endl;
+                    chargingTimestamp = currentTimestamp;
+                    charging = true;
                 }
             }
             if (a && b) {
@@ -109,9 +106,9 @@ class Drone{
             }
         }
 
-        int move() {
+        int move(int currentTimestamp) {
             Point p = getNextdestination();
-            return moveTowards(p);
+            return moveTowards(p, currentTimestamp);
         }
 
         Point getNextdestination() {
@@ -131,22 +128,26 @@ class Drone{
         }
 
         void activate(int currentTimestamp) {
-            if (id == 0 || id == 273 || id == 459) {
-                active = true;
-                deadBatteryTimestamp = currentTimestamp + 12000;
-            }
-            else if (id == 33 || id == 6 || id == 320) {
-                active = true;
-                deadBatteryTimestamp = currentTimestamp + 9000;
-            }
-            else {
-                active = true;
-                deadBatteryTimestamp = currentTimestamp + 18000;
-            }
+            active = true;
+            deadBatteryTimestamp = currentTimestamp + 18000;
+            charging = false;
+            chargingTimestamp = -1;
         }
 
         void shutDown() {
             active = false;
+        }
+
+        bool isCharging() {
+            return charging;
+        }
+
+        void ready() {
+            charging = false;
+        }
+
+        int getChargingTimestamp() {
+            return chargingTimestamp;
         }
 
     private:
@@ -157,4 +158,6 @@ class Drone{
         int y = 300;
         bool active = false;
         int deadBatteryTimestamp;
+        bool charging = false;
+        int chargingTimestamp = -1;
 };

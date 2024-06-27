@@ -57,14 +57,41 @@ void readDeadDronesEntries(redisContext* context) {
     for (size_t i = 0; i < reply->elements; ++i) {
         redisReply* entry = reply->element[i];
 
-        // Assuming each entry has one field-value pair
         const char* field = entry->element[1]->element[0]->str;
         const char* value = entry->element[1]->element[1]->str;
 
-        // Check if the value is "1"
         if (strcmp(value, "1") == 0) {
             std::cout << "Drone id " << field  << " battery dead" << std::endl;
         }
+    }
+
+    (redisReply*) redisCommand(context, "DEL %s", stream);
+    freeReplyObject(reply);
+}
+
+int charPtrToInt(const char* str) {
+    if (str == nullptr) {
+        std::cerr << "Invalid input: null pointer" << std::endl;
+        return 0;
+    }
+    return atoi(str);
+}
+
+void readChargingDronesEntries(redisContext* context) {
+    char stream[] = "rds";
+    redisReply* reply = (redisReply*) redisCommand(context, "XRANGE %s - +", stream);
+    if (reply == NULL) {
+        std::cerr << "Failed to read entries from stream" << std::endl;
+        return;
+    }
+
+    for (size_t i = 0; i < reply->elements; ++i) {
+        redisReply* entry = reply->element[i];
+
+        const char* field = entry->element[1]->element[0]->str;
+        const char* value = entry->element[1]->element[1]->str;
+
+        std::cout << "Drone id " << field  << " recharging... battery level " << value << "%" << std::endl;
     }
 
     (redisReply*) redisCommand(context, "DEL %s", stream);
@@ -80,6 +107,7 @@ char* intToCharPtr(int num) {
     }
     return str;
 }
+
 
 int randomRechargingTime() {
     std::random_device rd;
@@ -242,7 +270,7 @@ void moveToStartingPositions(std::vector<Drone>* ptrToDrones) {
                 drone.activate(0);
             }
             if ((drone).getX() != (drone).getPath()[0].x || (drone).getY() != (drone).getPath()[0].y) {
-                (drone).move();
+                (drone).move(-1);
                 a = false;
             }
         }
@@ -303,7 +331,9 @@ void runSimulation(int seconds) {
     int port = 6379;                    // Default Redis port
 
     redisContext* ptrToRedisContext = connectRedis(hostname, port);
+
     const char* deadDronesStream = "dds";
+    const char* rechargingDroneStream = "rds";
 
     bool space[601][601];
     memset(space, false, sizeof(space)); //sets all values in 'space' as false
@@ -330,6 +360,9 @@ void runSimulation(int seconds) {
     std::unordered_map<int, std::unordered_set<int>> dronesToMove;
     std::unordered_map<int, std::unordered_set<int>> dronesToReplace;
     std::unordered_map<int, std::unordered_set<int>> dronesDoneCharging;
+    std::unordered_map<int, int> chargeCompleteAt;
+
+    bool dronesAreCharging = false;
 
 
     //set a replacing time for each drone and save it in 'dronesToReplace'
@@ -357,6 +390,7 @@ void runSimulation(int seconds) {
         if (!(chargedDrones.empty())) {
             for (int chargedDroneIndex : chargedDrones) {
                 idleDrones.insert(chargedDroneIndex);
+                drones[chargedDroneIndex].ready();
             }
         }
 
@@ -411,12 +445,13 @@ void runSimulation(int seconds) {
                 continue;
             }
 
-            int movementTime = drone.move();
+            int movementTime = drone.move(timeSinceStart);
             drone.verify(space);
 
             if (!drone.isActive()) {
                 int chargingTimestamp = timeSinceStart + randomRechargingTime();
                 dronesDoneCharging[chargingTimestamp].insert(droneIndex);
+                chargeCompleteAt[droneIndex] = chargingTimestamp;
 
                 if (addedTimestamps.find(chargingTimestamp) == addedTimestamps.end()) {
                     insertInSortedVector(checkTimestamps, chargingTimestamp);
@@ -451,18 +486,21 @@ void runSimulation(int seconds) {
 
         if ((timeSinceStart - startingPositionsTimestamp) % 3000 == 0 && timeSinceStart != startingPositionsTimestamp) {
             
-            /*
-                - Remove other dead drones checks
-                - Fetch all dead drones data
-                - Add all entries to Redis' "mystream"
-                - Read entries and call montior funtion
-            */
-
+            //fetch data on recharging
+            //add rechargingDronesEntries to Redis stream
+            //visualize output
             for (int i = 0; i < drones.size(); i++) {
-                if (deadDrones.find(i) != deadDrones.end()) {
+                Drone& drone = drones[i];
+                int id = drone.getId();
+                if (drone.isCharging()) {
+                    char* key = intToCharPtr(id);
+                    char* value = intToCharPtr((timeSinceStart-drone.getChargingTimestamp())*100/(chargeCompleteAt[i]-drone.getChargingTimestamp()));
+                    addEntry(ptrToRedisContext, rechargingDroneStream, key, value);
+                    dronesAreCharging = true;
+                }
+                else if (deadDrones.find(i) != deadDrones.end()) {
                     continue;
                 }
-                int id = drones[i].getId();
                 char* key = intToCharPtr(id);
                 char value[] = "0";
                 addEntry(ptrToRedisContext, deadDronesStream, key, value);
@@ -491,7 +529,14 @@ void runSimulation(int seconds) {
             else {
                 std::cout << "No drones have died during coverage" << std::endl;
             }
+            if (dronesAreCharging) {
+                if (epoch == 5) {
+                    readChargingDronesEntries(ptrToRedisContext);
+                }
+            }
+
             deadDrones = {};
+            dronesAreCharging = false;
 
             std::cout << "\n\n" << std::endl;
             memset(space, false, sizeof(space));
@@ -507,6 +552,6 @@ void runSimulation(int seconds) {
 
 
 int main() {
-    runSimulation(3000);
+    runSimulation(1500);
     return 0;
 }
