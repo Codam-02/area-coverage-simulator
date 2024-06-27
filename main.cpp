@@ -40,6 +40,11 @@ void addEntry(redisContext* context, const char* stream, char* key, char* value)
     freeReplyObject(reply);
 }
 
+void addDeadDroneEntry(redisContext* context, const char* stream, char* key) {
+    char value[] = "1";
+    addEntry(context, stream, key, value);
+}
+
 // Function to read entries from a stream
 void readDeadDronesEntries(redisContext* context, const char* stream) {
     redisReply* reply = (redisReply*) redisCommand(context, "XRANGE %s - +", stream);
@@ -300,14 +305,17 @@ void runSimulation(int seconds) {
     const char* deadDronesStream = "dds";
 
     bool space[601][601];
-    memset(space, false, sizeof(space));
+    memset(space, false, sizeof(space)); //sets all values in 'space' as false
 
     std::vector<Drone> drones;
     std::vector<Drone>* ptrToDrones = &drones;
-    std::unordered_set<int> idleDrones = {};
-    std::unordered_set<int> deadDrones = {};
-    setDronesPathings(ptrToDrones);
-    moveToStartingPositions(ptrToDrones);
+
+    std::unordered_set<int> idleDrones = {}; //contains indexes of drones that are done charging
+
+    std::unordered_set<int> deadDrones = {}; //contains indexes of drones that have dead batteries
+
+    setDronesPathings(ptrToDrones); //sets path for each drone
+    moveToStartingPositions(ptrToDrones); //gets all drones to their initial coverage position
 
 
     int startingPositionsTimestamp = (timeToTravel(300,300,1,0));
@@ -323,7 +331,7 @@ void runSimulation(int seconds) {
     std::unordered_map<int, std::unordered_set<int>> dronesDoneCharging;
 
 
-    //update dronesToReplace hashmap with eventual new timestamps
+    //set a replacing time for each drone and save it in 'dronesToReplace'
     for (int i = 0; i < drones.size(); i++) {
         drones[i].verify(space);
 
@@ -340,10 +348,10 @@ void runSimulation(int seconds) {
     }
 
 
-
+    //This loop iterates through all timestamps and performs all functions due in runtime
     while (timeSinceStart < seconds * 10 + startingPositionsTimestamp) {
 
-        //handle drones done charging
+        //handle drones done charging in current timestamp
         std::unordered_set<int> chargedDrones = dronesDoneCharging[timeSinceStart];
         if (!(chargedDrones.empty())) {
             for (int chargedDroneIndex : chargedDrones) {
@@ -351,6 +359,7 @@ void runSimulation(int seconds) {
             }
         }
 
+        //handles drones that need replacement in current timestamp
         std::unordered_set<int> dyingDrones = dronesToReplace[timeSinceStart];
         if (!(dyingDrones.empty())) {
             for (int droneIndex : dyingDrones) {
@@ -361,11 +370,11 @@ void runSimulation(int seconds) {
                 }
                 int indexToReplacingDrone;
                 if (idleDrones.empty()) {
-                    indexToReplacingDrone = createDrone(&drones, timeSinceStart);
+                    indexToReplacingDrone = createDrone(&drones, timeSinceStart); //if there's no idle drones, a new one is created
                 }
                 else {
                     auto it = idleDrones.begin();
-                    indexToReplacingDrone = *it;
+                    indexToReplacingDrone = *it;                                  //otherwise one of the idle drones is selected
                     idleDrones.erase(it);
                 }
                 Drone& replacingDrone = drones[indexToReplacingDrone];
@@ -386,14 +395,14 @@ void runSimulation(int seconds) {
             }
         }
 
+        //hanldes drone movement in current timestamp
         std::unordered_set<int> movingDrones = dronesToMove[timeSinceStart];
         for (int droneIndex : movingDrones) {
             Drone& drone = drones[droneIndex];
             if (drone.getDeadBatteryTimestamp() != -1 && drone.getDeadBatteryTimestamp() <= timeSinceStart && (deadDrones.find(droneIndex) == deadDrones.end())) {
                 int id = drones[droneIndex].getId();
                 char* key = intToCharPtr(id);
-                char value[] = "1";
-                addEntry(ptrToRedisContext, deadDronesStream, key, value);
+                addDeadDroneEntry(ptrToRedisContext, deadDronesStream, key);
                 deadDrones.insert(droneIndex);
                 drone.shutDown();
             }
