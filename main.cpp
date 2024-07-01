@@ -94,7 +94,6 @@ void readChargingDronesEntries(redisContext* context) {
         std::cout << "Drone id " << field  << " recharging... battery level " << value << "%" << std::endl;
     }
 
-    (redisReply*) redisCommand(context, "DEL %s", stream);
     freeReplyObject(reply);
 }
 
@@ -486,9 +485,6 @@ void runSimulation(int seconds) {
 
         if ((timeSinceStart - startingPositionsTimestamp) % 3000 == 0 && timeSinceStart != startingPositionsTimestamp) {
             
-            //fetch data on recharging
-            //add rechargingDronesEntries to Redis stream
-            //visualize output
             for (int i = 0; i < drones.size(); i++) {
                 Drone& drone = drones[i];
                 int id = drone.getId();
@@ -498,7 +494,7 @@ void runSimulation(int seconds) {
                     addEntry(ptrToRedisContext, rechargingDroneStream, key, value);
                     dronesAreCharging = true;
                 }
-                else if (deadDrones.find(i) != deadDrones.end()) {
+                else if (deadDrones.find(i) == deadDrones.end()) {
                     continue;
                 }
                 char* key = intToCharPtr(id);
@@ -540,6 +536,8 @@ void runSimulation(int seconds) {
 
             std::cout << "\n\n" << std::endl;
             memset(space, false, sizeof(space));
+            (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", rechargingDroneStream);
+
             epoch++;
             for (Drone& drone : drones) {
                 if (drone.isActive()) {
