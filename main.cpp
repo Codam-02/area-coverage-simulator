@@ -36,7 +36,7 @@ void addEntry(redisContext* context, const char* stream, char* key, char* value)
         std::cerr << "Failed to add entry to stream" << std::endl;
         return;
     }
-    //std::cout << "Added entry with value: " << value << std::endl;
+    
     freeReplyObject(reply);
 }
 
@@ -46,7 +46,7 @@ void addDeadDroneEntry(redisContext* context, const char* stream, char* key) {
 }
 
 // Function to read entries from a stream
-void readDeadDronesEntries(redisContext* context) {
+void deadDronesMonitor(redisContext* context) {
     char stream[] = "dds";
     redisReply* reply = (redisReply*) redisCommand(context, "XRANGE %s - +", stream);
     if (reply == NULL) {
@@ -54,15 +54,11 @@ void readDeadDronesEntries(redisContext* context) {
         return;
     }
 
-    for (size_t i = 0; i < reply->elements; ++i) {
-        redisReply* entry = reply->element[i];
-
-        const char* field = entry->element[1]->element[0]->str;
-        const char* value = entry->element[1]->element[1]->str;
-
-        if (strcmp(value, "1") == 0) {
-            std::cout << "Drone id " << field  << " battery dead" << std::endl;
-        }
+    if (reply->elements == 0) {
+        std::cout << "OK! No drones have died in this epoch" << std::endl;
+    }
+    else {
+        std::cout << "ERROR! " << reply->elements << " drones have died in this epoch" << std::endl;
     }
 
     (redisReply*) redisCommand(context, "DEL %s", stream);
@@ -77,7 +73,7 @@ int charPtrToInt(const char* str) {
     return atoi(str);
 }
 
-void readChargingDronesEntries(redisContext* context) {
+void chargingDronesMonitor(redisContext* context) {
     char stream[] = "rds";
     redisReply* reply = (redisReply*) redisCommand(context, "XRANGE %s - +", stream);
     if (reply == NULL) {
@@ -85,13 +81,33 @@ void readChargingDronesEntries(redisContext* context) {
         return;
     }
 
-    for (size_t i = 0; i < reply->elements; ++i) {
-        redisReply* entry = reply->element[i];
+    if (reply->elements == 0) {
+        std::cout << "No drones are currently charging" << std::endl;
+    }
+    else {
+        std::cout << reply->elements << " drones are currently charging" << std::endl;
+    }
 
-        const char* field = entry->element[1]->element[0]->str;
-        const char* value = entry->element[1]->element[1]->str;
+    freeReplyObject(reply);
+}
 
-        std::cout << "Drone id " << field  << " recharging... battery level " << value << "%" << std::endl;
+void pointCoverageMonitor(redisContext* context, int epoch) {
+    char stream[] = "pcs";
+    redisReply* reply = (redisReply*) redisCommand(context, "XRANGE %s - +", stream);
+    if (reply == NULL) {
+        std::cerr << "Failed to read entries from stream" << std::endl;
+        return;
+    }
+
+    size_t i = epoch - 1;
+    redisReply* entry = reply->element[i];
+
+    const char* value = entry->element[1]->element[1]->str;
+    if (strcmp(value,"0") == 0) {
+        std::cout << "OK! All points were successfully covered by drones" << std::endl;
+    }
+    else {
+        std::cout << "ERROR! " << value << " points were not covered by drones" << std::endl;
     }
 
     freeReplyObject(reply);
@@ -333,9 +349,11 @@ void runSimulation(int seconds) {
 
     const char* deadDronesStream = "dds";
     const char* rechargingDroneStream = "rds";
+    const char* pointCoverageStream = "pcs";
 
-    bool space[601][601];
-    memset(space, false, sizeof(space)); //sets all values in 'space' as false
+    (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", deadDronesStream);
+    (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", rechargingDroneStream);
+    (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", pointCoverageStream);
 
     std::vector<Drone> drones;
     std::vector<Drone>* ptrToDrones = &drones;
@@ -360,13 +378,14 @@ void runSimulation(int seconds) {
     std::unordered_map<int, std::unordered_set<int>> dronesToReplace;
     std::unordered_map<int, std::unordered_set<int>> dronesDoneCharging;
     std::unordered_map<int, int> chargeCompleteAt;
+    std::unordered_map<int, std::unordered_map<int, bool>> pointIsVerified;
 
     bool dronesAreCharging = false;
 
 
     //set a replacing time for each drone and save it in 'dronesToReplace'
     for (int i = 0; i < drones.size(); i++) {
-        drones[i].verify(space);
+        drones[i].verify(&pointIsVerified);
 
         dronesToMove[timeSinceStart].insert(i);
 
@@ -445,7 +464,7 @@ void runSimulation(int seconds) {
             }
 
             int movementTime = drone.move(timeSinceStart);
-            drone.verify(space);
+            drone.verify(&pointIsVerified);
 
             if (!drone.isActive()) {
                 int chargingTimestamp = timeSinceStart + randomRechargingTime();
@@ -494,54 +513,42 @@ void runSimulation(int seconds) {
                     addEntry(ptrToRedisContext, rechargingDroneStream, key, value);
                     dronesAreCharging = true;
                 }
-                else if (deadDrones.find(i) == deadDrones.end()) {
-                    continue;
-                }
-                char* key = intToCharPtr(id);
-                char value[] = "0";
-                addEntry(ptrToRedisContext, deadDronesStream, key, value);
             }
 
-            std::cout << "Checking epoch " << epoch << "...\t";
-            int errors = 0;
+            int nonCoveredPoints = 0;
             for (int i = 0; i < 601; i++) {
                 for (int j = 0; j < 601; j++) {
-                    if (!space[i][j]) {
-                        errors++;
+                    if (!pointIsVerified[i][j]) {
+                        nonCoveredPoints++;
                     }
                 }
             }
-            if (errors == 0) {
-                std::cout << "All points are verified at epoch " << epoch  << ", time elapsed:\t" << (timeSinceStart) / 36000 << " hours\t" << ((timeSinceStart) % 36000) / 600 << " minutes\t" << float((timeSinceStart) % 600) / 10 << " seconds" << std::endl;
-            }
-            else {
-                std::cout << "ERROR: " << errors << " points were not verified at epoch " << epoch << ", time elapsed:\t" << (timeSinceStart) / 36000 << " hours\t" << std::endl;
-            }
-            std::cout << "The number of drones at the end of epoch " << epoch << " is " << drones.size() << std::endl;
-            if (deadDrones.size() > 0) {
-                std::cout << "ERROR: " << deadDrones.size() << " drones have died during coverage:" << std::endl;
-                readDeadDronesEntries(ptrToRedisContext);
-            }
-            else {
-                std::cout << "No drones have died during coverage" << std::endl;
-            }
-            if (dronesAreCharging) {
-                if (epoch == 5) {
-                    readChargingDronesEntries(ptrToRedisContext);
-                }
-            }
+
+            std::cout << "EPOCH " << epoch << "\n";
+
+            char* key = intToCharPtr(epoch);
+            char* value = intToCharPtr(nonCoveredPoints);
+            addEntry(ptrToRedisContext, pointCoverageStream, key, value);
+            
+            std::cout << "Time since simulation start:\t" << (timeSinceStart) / 36000 << " hours\t" << ((timeSinceStart) % 36000) / 600 << " minutes\t" << std::endl;
+
+            std::cout << "The number of drones at the end of epoch " << epoch << " is " << drones.size() << "\n" << std::endl;
+
+            chargingDronesMonitor(ptrToRedisContext);
+            pointCoverageMonitor(ptrToRedisContext, epoch);
+            deadDronesMonitor(ptrToRedisContext);
 
             deadDrones = {};
             dronesAreCharging = false;
 
             std::cout << "\n\n" << std::endl;
-            memset(space, false, sizeof(space));
+            pointIsVerified.clear();
             (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", rechargingDroneStream);
 
             epoch++;
             for (Drone& drone : drones) {
                 if (drone.isActive()) {
-                    drone.verify(space);
+                    drone.verify(&pointIsVerified);
                 }
             }
         }

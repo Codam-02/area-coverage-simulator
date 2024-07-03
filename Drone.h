@@ -2,6 +2,7 @@
 #include "Point.h"
 #include <vector>
 #include <iostream>
+#include <unordered_map>
 
 class Drone{
     public:
@@ -33,28 +34,28 @@ class Drone{
             path.push_back(p);
         }
         
-        void verify(bool (&space)[601][601]) {
-            if (not(space[y][x])) {
-                    space[y][x] = true;
+        void verify(std::unordered_map<int, std::unordered_map<int, bool>>* pointIsVerified) {
+            if (!((*pointIsVerified)[y][x])) {
+                    (*pointIsVerified)[y][x] = true;
             }
             if (x > 0) {
-                if (not(space[y][x-1])) {
-                    space[y][x-1] = true;
+                if (!((*pointIsVerified)[y][x-1])) {
+                    (*pointIsVerified)[y][x-1] = true;
                 }
             }
             if (x < 600) {
-                if (not(space[y][x+1])) {
-                    space[y][x+1] = true;
+                if (!((*pointIsVerified)[y][x+1])) {
+                    (*pointIsVerified)[y][x+1] = true;
                 }
             }
             if (y > 0) {
-                if (not(space[y-1][x])) {
-                    space[y-1][x] = true;
+                if (!((*pointIsVerified)[y-1][x])) {
+                    (*pointIsVerified)[y-1][x] = true;
                 }
             }
             if (y < 600) {
-                if (not(space[y+1][x])) {
-                    space[y+1][x] = true;
+                if (!((*pointIsVerified)[y+1][x])) {
+                    (*pointIsVerified)[y+1][x] = true;
                 }
             }
         } 
