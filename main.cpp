@@ -40,12 +40,22 @@ void addEntry(redisContext* context, const char* stream, char* key, char* value)
     freeReplyObject(reply);
 }
 
+//Function to add a positive entry to deadDronesStream
 void addDeadDroneEntry(redisContext* context, const char* stream, char* key) {
     char value[] = "1";
     addEntry(context, stream, key, value);
 }
 
-// Function to read entries from a stream
+//This function converts a string (char*) to int
+int charPtrToInt(const char* str) {
+    if (str == nullptr) {
+        std::cerr << "Invalid input: null pointer" << std::endl;
+        return 0;
+    }
+    return atoi(str);
+}
+
+//This function reads data from the deadDronesStream and visualizes a console log
 void deadDronesMonitor(redisContext* context) {
     char stream[] = "dds";
     redisReply* reply = (redisReply*) redisCommand(context, "XRANGE %s - +", stream);
@@ -65,14 +75,7 @@ void deadDronesMonitor(redisContext* context) {
     freeReplyObject(reply);
 }
 
-int charPtrToInt(const char* str) {
-    if (str == nullptr) {
-        std::cerr << "Invalid input: null pointer" << std::endl;
-        return 0;
-    }
-    return atoi(str);
-}
-
+//This function reads data from the rechargingDronesStream and visualizes a console log
 void chargingDronesMonitor(redisContext* context) {
     char stream[] = "rds";
     redisReply* reply = (redisReply*) redisCommand(context, "XRANGE %s - +", stream);
@@ -92,6 +95,7 @@ void chargingDronesMonitor(redisContext* context) {
     freeReplyObject(reply);
 }
 
+//This function reads data from the pointCoverageStream and visualizes a console log
 void pointCoverageMonitor(redisContext* context, int epoch) {
     char stream[] = "pcs";
     redisReply* reply = (redisReply*) redisCommand(context, "XRANGE %s - +", stream);
@@ -114,6 +118,7 @@ void pointCoverageMonitor(redisContext* context, int epoch) {
     freeReplyObject(reply);
 }
 
+//This function reads data from the rechargingTimersStream and visualizes a console log
 void chargingTimersMonitor(redisContext* context) {
     char stream[] = "rts";
     redisReply* reply = (redisReply*) redisCommand(context, "XRANGE %s - +", stream);
@@ -144,7 +149,7 @@ void chargingTimersMonitor(redisContext* context) {
     freeReplyObject(reply);
 }
 
-//string manipulation function
+//This function converts a int to string (char*) and returns its pointer
 char* intToCharPtr(int num) {
     std::string temp = std::to_string(num);
     char* str = (char*)malloc((temp.length() + 1) * sizeof(char));
@@ -154,7 +159,7 @@ char* intToCharPtr(int num) {
     return str;
 }
 
-
+//This function generates a random value between 2 and 3 hours (in tenths of second)
 int randomRechargingTime() {
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -165,6 +170,7 @@ int randomRechargingTime() {
     return rechargingTime;
 }
 
+//This function takes two point-coordinates as arguments and returns the time to travel from one to another at 30Km/h (in tenths of second)
 int timeToTravel(int x, int y, int x1, int y1) {
 
     int tenthsOfSecond = 0;
@@ -184,12 +190,14 @@ int timeToTravel(int x, int y, int x1, int y1) {
     return tenthsOfSecond;
 }
 
+//Creates a new drone, assigns it an id and adds it to the drone vector
 int createDrone(std::vector<Drone>* ptrToDrones, int currentTimestamp) {
     int id = ptrToDrones->size();
     ptrToDrones->push_back(Drone(id, currentTimestamp));
     return id;
 }
 
+//Called on a vector of 725 drones, this function sets optimal paths for each drone for them to cover a 6Km x 6Km space
 void setDronesPathings(std::vector<Drone>* ptrToDrones) {
     int d = 0;
     Point center;
@@ -282,6 +290,7 @@ void setDronesPathings(std::vector<Drone>* ptrToDrones) {
     }
 }
 
+//low-level function that handles timestamp implementation and distribution
 void setTimestamps(std::vector<int>* ptrToCheckTimestamps, int seconds) {
     const int timeLimit = seconds; //total amount of simulation time expressed in tenths of second
     int i = 1;
@@ -308,6 +317,7 @@ void setTimestamps(std::vector<int>* ptrToCheckTimestamps, int seconds) {
     std::sort((*ptrToCheckTimestamps).begin(), (*ptrToCheckTimestamps).end());
 }
 
+//This function activates all 725 drones for them to move towards their initial-coverage position
 void moveToStartingPositions(std::vector<Drone>* ptrToDrones) {
     while (true) {
         bool a = true;
@@ -340,6 +350,7 @@ void visualizeIntVector(std::vector<int>* ptrToVector) {
 }
 */
 
+//returns timestamp (in tenths of second) in which a new drone should leave the control center to replace the drone that ptrToDrone points to
 int replacingTime(Drone* ptrToDrone) {
     Drone drone = *ptrToDrone;
     if (drone.getPath().size() == 18) {
@@ -354,6 +365,7 @@ int replacingTime(Drone* ptrToDrone) {
     }
 }
 
+//returns true if the drone that ptrToDrone points to should stall to sync with other drones
 bool droneShouldStall(Drone* ptrToDrone) {
     Drone drone = *ptrToDrone;
     Point p = drone.getPath()[0];
@@ -366,11 +378,13 @@ bool droneShouldStall(Drone* ptrToDrone) {
     return false;
 }
 
+//vector manipulation functioj
 void insertInSortedVector(std::vector<int>& vec, int num) {
     auto it = std::lower_bound(vec.begin(), vec.end(), num);
     vec.insert(it, num);
 }
 
+//main function, handles all sections of the simulation
 void runSimulation(int seconds) {
 
     const char* hostname = "127.0.0.1";  // Localhost IP address
@@ -383,10 +397,10 @@ void runSimulation(int seconds) {
     const char* pointCoverageStream = "pcs";
     const char* rechargingTimersStream = "rts";
 
-    (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", deadDronesStream);
-    (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", rechargingDroneStream);
-    (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", pointCoverageStream);
-    (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", rechargingTimersStream);
+    (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", deadDronesStream);          //
+    (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", rechargingDroneStream);     // Flush all Redis streams
+    (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", pointCoverageStream);       // objects to not overwrite data
+    (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", rechargingTimersStream);    //
 
     std::vector<Drone> drones;
     std::vector<Drone>* ptrToDrones = &drones;
