@@ -68,7 +68,7 @@ void deadDronesMonitor(redisContext* context) {
         std::cout << "OK! No drones have died in this epoch" << std::endl;
     }
     else {
-        std::cout << "ERROR! " << reply->elements << " drones have died in this epoch" << std::endl;
+        std::cout << "ERROR! " << reply->elements << " drones have died during this epoch" << std::endl;
     }
 
     (redisReply*) redisCommand(context, "DEL %s", stream);
@@ -119,8 +119,15 @@ void pointCoverageMonitor(redisContext* context, int epoch) {
 }
 
 //This function reads data from the rechargingTimersStream and visualizes a console log
-void chargingTimersMonitor(redisContext* context) {
+void chargingTimersMonitor(redisContext* context, bool dronesEnteredCharging) {
     char stream[] = "rts";
+
+    if (!dronesEnteredCharging) {
+        std::cout << "OK! No drones entered charging phase during this epoch" << std::endl;
+        (redisReply*) redisCommand(context, "DEL %s", stream); 
+        return;
+    }
+
     redisReply* reply = (redisReply*) redisCommand(context, "XRANGE %s - +", stream);
     if (reply == NULL) {
         std::cerr << "Failed to read entries from stream" << std::endl;
@@ -142,7 +149,7 @@ void chargingTimersMonitor(redisContext* context) {
         std::cout << "OK! All recharging timers are between 2 and 3 hours" << std::endl;
     }
     else {
-        std::cout << "ERROR! Some recharging timers are not between 2 and 3 hours" << std::endl;
+        std::cout << "ERROR! Recharging timers are not between 2 and 3 hours" << std::endl;
     }
 
     (redisReply*) redisCommand(context, "DEL %s", stream); 
@@ -428,6 +435,7 @@ void runSimulation(int seconds) {
     std::unordered_map<int, std::unordered_map<int, bool>> pointIsVerified;
 
     bool dronesAreCharging = false;
+    bool dronesEnteredCharging = false;
 
 
     //set a replacing time for each drone and save it in 'dronesToReplace'
@@ -518,6 +526,7 @@ void runSimulation(int seconds) {
                 addEntry(ptrToRedisContext, rechargingTimersStream, intToCharPtr(drone.getId()), intToCharPtr(chargingTimestamp - timeSinceStart));
                 dronesDoneCharging[chargingTimestamp].insert(droneIndex);
                 chargeCompleteAt[droneIndex] = chargingTimestamp;
+                dronesEnteredCharging = true;
 
                 if (addedTimestamps.find(chargingTimestamp) == addedTimestamps.end()) {
                     insertInSortedVector(checkTimestamps, chargingTimestamp);
@@ -583,12 +592,13 @@ void runSimulation(int seconds) {
             std::cout << "The number of drones at the end of epoch " << epoch << " is " << drones.size() << "\n" << std::endl;
 
             chargingDronesMonitor(ptrToRedisContext);
-            chargingTimersMonitor(ptrToRedisContext);
+            chargingTimersMonitor(ptrToRedisContext, dronesEnteredCharging);
             pointCoverageMonitor(ptrToRedisContext, epoch);
             deadDronesMonitor(ptrToRedisContext);
 
             deadDrones = {};
             dronesAreCharging = false;
+            dronesEnteredCharging = false;
 
             std::cout << "\n\n" << std::endl;
             pointIsVerified.clear();
