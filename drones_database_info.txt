@@ -1,0 +1,3 @@
+database name: drones_database
+user: codam
+pword: 1234
