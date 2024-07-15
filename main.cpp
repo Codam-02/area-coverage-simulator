@@ -10,7 +10,115 @@
 #include <random>
 #include <chrono>
 #include <hiredis/hiredis.h>
+#include <libpq-fe.h>
 
+//The following 4 function are designed to interact with a locally hosted postgresql database
+
+void do_exit(PGconn *conn) {
+    PQfinish(conn);
+    exit(1);
+}
+
+void add_row(const char* conninfo, const char* table_name, const char* col_names[], const char* values[], int col_count) {
+    PGconn *conn = PQconnectdb(conninfo);
+
+    if (PQstatus(conn) == CONNECTION_BAD) {
+        std::cerr << "Connection to database failed: " << PQerrorMessage(conn) << std::endl;
+        do_exit(conn);
+    }
+
+    // Construct the CREATE TABLE query
+    std::string create_table_query = "CREATE TABLE IF NOT EXISTS " + std::string(table_name) + " (id SERIAL PRIMARY KEY, ";
+    for (int i = 0; i < col_count; ++i) {
+        create_table_query += col_names[i] + std::string(" VARCHAR(50)");
+        if (i < col_count - 1) create_table_query += ", ";
+    }
+    create_table_query += ")";
+
+    // Execute the CREATE TABLE query
+    PGresult *res = PQexec(conn, create_table_query.c_str());
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        std::cerr << "Create table failed: " << PQerrorMessage(conn) << std::endl;
+        PQclear(res);
+        do_exit(conn);
+    }
+    PQclear(res);
+
+    // Construct the INSERT query
+    std::string insert_query = "INSERT INTO " + std::string(table_name) + " (";
+    for (int i = 0; i < col_count; ++i) {
+        insert_query += col_names[i];
+        if (i < col_count - 1) insert_query += ", ";
+    }
+    insert_query += ") VALUES (";
+    for (int i = 0; i < col_count; ++i) {
+        insert_query += "'" + std::string(values[i]) + "'";
+        if (i < col_count - 1) insert_query += ", ";
+    }
+    insert_query += ")";
+
+    // Execute the INSERT query
+    res = PQexec(conn, insert_query.c_str());
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        std::cerr << "Insert failed: " << PQerrorMessage(conn) << std::endl;
+        PQclear(res);
+        do_exit(conn);
+    }
+    PQclear(res);
+
+    PQfinish(conn);
+}
+
+void read_values(const char* conninfo, const char* table_name) {
+    PGconn *conn = PQconnectdb(conninfo);
+
+    if (PQstatus(conn) == CONNECTION_BAD) {
+        std::cerr << "Connection to database failed: " << PQerrorMessage(conn) << std::endl;
+        do_exit(conn);
+    }
+
+    std::string query = "SELECT * FROM " + std::string(table_name);
+    PGresult *res = PQexec(conn, query.c_str());
+
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        std::cerr << "SELECT failed: " << PQerrorMessage(conn) << std::endl;
+        PQclear(res);
+        do_exit(conn);
+    }
+
+    int nFields = PQnfields(res);
+
+    for (int i = 0; i < PQntuples(res); i++) {
+        for (int j = 0; j < nFields; j++) {
+            std::cout << PQfname(res, j) << ": " << PQgetvalue(res, i, j) << "\n";
+        }
+        std::cout << std::endl;
+    }
+
+    PQclear(res);
+    PQfinish(conn);
+}
+
+void erase_data(const char* conninfo, const char* table_name) {
+    PGconn *conn = PQconnectdb(conninfo);
+
+    if (PQstatus(conn) == CONNECTION_BAD) {
+        std::cerr << "Connection to database failed: " << PQerrorMessage(conn) << std::endl;
+        do_exit(conn);
+    }
+
+    std::string query = "DELETE FROM " + std::string(table_name);
+    PGresult *res = PQexec(conn, query.c_str());
+
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        std::cerr << "Delete failed: " << PQerrorMessage(conn) << std::endl;
+        PQclear(res);
+        do_exit(conn);
+    }
+
+    PQclear(res);
+    PQfinish(conn);
+}
 
 //The following three functions are defined as Redis Streams interaction functions
 
