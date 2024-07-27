@@ -12,14 +12,14 @@
 #include <hiredis/hiredis.h>
 #include <libpq-fe.h>
 
-//The following 4 function are designed to interact with a locally hosted postgresql database
+//The following 5 functions are designed to interact with a locally hosted postgresql database
 
 void do_exit(PGconn *conn) {
     PQfinish(conn);
     exit(1);
 }
 
-void add_row(const char* conninfo, const char* table_name, const char* col_names[], const char* values[], int col_count) {
+void create_table(const char* conninfo, const char* table_name, const char* col_names[], int col_count) {
     PGconn *conn = PQconnectdb(conninfo);
 
     if (PQstatus(conn) == CONNECTION_BAD) {
@@ -28,9 +28,13 @@ void add_row(const char* conninfo, const char* table_name, const char* col_names
     }
 
     // Construct the CREATE TABLE query
-    std::string create_table_query = "CREATE TABLE IF NOT EXISTS " + std::string(table_name) + " (id SERIAL PRIMARY KEY, ";
+    std::string create_table_query = "CREATE TABLE " + std::string(table_name) + " (";
     for (int i = 0; i < col_count; ++i) {
-        create_table_query += col_names[i] + std::string(" VARCHAR(50)");
+        if (i == 0) {
+            create_table_query += std::string(col_names[i]) + " SERIAL PRIMARY KEY";
+        } else {
+            create_table_query += std::string(col_names[i]) + " VARCHAR(50)";
+        }
         if (i < col_count - 1) create_table_query += ", ";
     }
     create_table_query += ")";
@@ -43,6 +47,17 @@ void add_row(const char* conninfo, const char* table_name, const char* col_names
         do_exit(conn);
     }
     PQclear(res);
+
+    PQfinish(conn);
+}
+
+void add_row(const char* conninfo, const char* table_name, const char* col_names[], const char* values[], int col_count) {
+    PGconn *conn = PQconnectdb(conninfo);
+
+    if (PQstatus(conn) == CONNECTION_BAD) {
+        std::cerr << "Connection to database failed: " << PQerrorMessage(conn) << std::endl;
+        do_exit(conn);
+    }
 
     // Construct the INSERT query
     std::string insert_query = "INSERT INTO " + std::string(table_name) + " (";
@@ -58,7 +73,7 @@ void add_row(const char* conninfo, const char* table_name, const char* col_names
     insert_query += ")";
 
     // Execute the INSERT query
-    res = PQexec(conn, insert_query.c_str());
+    PGresult *res = PQexec(conn, insert_query.c_str());
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
         std::cerr << "Insert failed: " << PQerrorMessage(conn) << std::endl;
         PQclear(res);
@@ -68,6 +83,7 @@ void add_row(const char* conninfo, const char* table_name, const char* col_names
 
     PQfinish(conn);
 }
+
 
 void read_values(const char* conninfo, const char* table_name) {
     PGconn *conn = PQconnectdb(conninfo);
@@ -525,6 +541,7 @@ void runSimulation(int seconds) {
 
     const char* pointCoverageTable = "pct";
     const char* pctCols[] = {"epoch", "output"};
+    create_table(conninfo, pointCoverageTable, pctCols, 2);
 
     const char* hostname = "127.0.0.1";  // Localhost IP address
     int port = 6379;                    // Default Redis port
@@ -538,7 +555,7 @@ void runSimulation(int seconds) {
 
     (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", deadDronesStream);          //
     (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", rechargingDroneStream);     // Flush all Redis streams
-    (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", pointCoverageStream);       // objects to not overwrite data
+    (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", pointCoverageStream);       // objects to avoid data overwriting
     (redisReply*) redisCommand(ptrToRedisContext, "DEL %s", rechargingTimersStream);    //
 
     std::vector<Drone> drones;
