@@ -99,7 +99,7 @@ void read_values(const char* conninfo, const char* table_name) {
     PQfinish(conn);
 }
 
-void erase_data(const char* conninfo, const char* table_name) {
+void erase_data(const char* conninfo) {
     PGconn *conn = PQconnectdb(conninfo);
 
     if (PQstatus(conn) == CONNECTION_BAD) {
@@ -107,13 +107,30 @@ void erase_data(const char* conninfo, const char* table_name) {
         do_exit(conn);
     }
 
-    std::string query = "DELETE FROM " + std::string(table_name);
-    PGresult *res = PQexec(conn, query.c_str());
+    // Query to get all table names in the public schema
+    const char* query = "SELECT tablename FROM pg_tables WHERE schemaname = 'public'";
+    PGresult *res = PQexec(conn, query);
 
-    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-        std::cerr << "Delete failed: " << PQerrorMessage(conn) << std::endl;
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        std::cerr << "Fetch tables failed: " << PQerrorMessage(conn) << std::endl;
         PQclear(res);
         do_exit(conn);
+    }
+
+    int nTables = PQntuples(res);
+
+    for (int i = 0; i < nTables; i++) {
+        std::string table_name = PQgetvalue(res, i, 0);
+        std::string drop_query = "DROP TABLE IF EXISTS " + table_name + " CASCADE";
+        PGresult *drop_res = PQexec(conn, drop_query.c_str());
+
+        if (PQresultStatus(drop_res) != PGRES_COMMAND_OK) {
+            std::cerr << "Drop table failed: " << PQerrorMessage(conn) << std::endl;
+            PQclear(drop_res);
+            do_exit(conn);
+        }
+
+        PQclear(drop_res);
     }
 
     PQclear(res);
@@ -502,6 +519,13 @@ void insertInSortedVector(std::vector<int>& vec, int num) {
 //main function, handles all sections of the simulation
 void runSimulation(int seconds) {
 
+    //postgresql database connection info
+    const char* conninfo = "dbname=drones_database user=codam password=1234 hostaddr=127.0.0.1 port=5432";
+    erase_data(conninfo);
+
+    const char* pointCoverageTable = "pct";
+    const char* pctCols[] = {"epoch", "output"};
+
     const char* hostname = "127.0.0.1";  // Localhost IP address
     int port = 6379;                    // Default Redis port
 
@@ -694,6 +718,8 @@ void runSimulation(int seconds) {
             char* key = intToCharPtr(epoch);
             char* value = intToCharPtr(nonCoveredPoints);
             addEntry(ptrToRedisContext, pointCoverageStream, key, value);
+            const char* values[] = {(intToCharPtr(epoch)), (nonCoveredPoints == 0 ? "pass" : "fail")};
+            add_row(conninfo, pointCoverageTable, pctCols, values, 2);
             
             std::cout << "Time since simulation start:\t" << (timeSinceStart) / 36000 << " hours\t" << ((timeSinceStart) % 36000) / 600 << " minutes\t" << std::endl;
 
