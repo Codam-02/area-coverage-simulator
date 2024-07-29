@@ -539,6 +539,10 @@ void runSimulation(int seconds) {
     const char* conninfo = "dbname=drones_database user=codam password=1234 hostaddr=127.0.0.1 port=5432";
     erase_data(conninfo);
 
+    const char* deadDronesTable = "ddt";
+    const char* ddtCols[] = {"epoch", "count"};
+    create_table(conninfo, deadDronesTable, ddtCols, 2);
+
     const char* pointCoverageTable = "pct";
     const char* pctCols[] = {"epoch", "output"};
     create_table(conninfo, pointCoverageTable, pctCols, 2);
@@ -735,8 +739,10 @@ void runSimulation(int seconds) {
             char* key = intToCharPtr(epoch);
             char* value = intToCharPtr(nonCoveredPoints);
             addEntry(ptrToRedisContext, pointCoverageStream, key, value);
-            const char* values[] = {(intToCharPtr(epoch)), (nonCoveredPoints == 0 ? "pass" : "fail")};
-            add_row(conninfo, pointCoverageTable, pctCols, values, 2);
+            const char* pctValues[] = {(intToCharPtr(epoch)), (nonCoveredPoints == 0 ? "pass" : "fail")};
+            add_row(conninfo, pointCoverageTable, pctCols, pctValues, 2);
+            const char* ddtValues[] = {(intToCharPtr(epoch)), (intToCharPtr(deadDrones.size()))};
+            add_row(conninfo, deadDronesTable, ddtCols, ddtValues, 2);
             
             std::cout << "Time since simulation start:\t" << (timeSinceStart) / 36000 << " hours\t" << ((timeSinceStart) % 36000) / 600 << " minutes\t" << std::endl;
 
