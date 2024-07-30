@@ -543,6 +543,10 @@ void runSimulation(int seconds) {
     const char* ddtCols[] = {"epoch", "count"};
     create_table(conninfo, deadDronesTable, ddtCols, 2);
 
+    const char* rechargingDronesTable = "rdt";
+    const char* rdtCols[] = {"epoch", "count"};
+    create_table(conninfo, rechargingDronesTable, rdtCols, 2);
+
     const char* pointCoverageTable = "pct";
     const char* pctCols[] = {"epoch", "output"};
     create_table(conninfo, pointCoverageTable, pctCols, 2);
@@ -587,7 +591,7 @@ void runSimulation(int seconds) {
     std::unordered_map<int, int> chargeCompleteAt;
     std::unordered_map<int, std::unordered_map<int, bool>> pointIsVerified;
 
-    bool dronesAreCharging = false;
+    int chargingDrones = 0;
     bool dronesEnteredCharging = false;
 
 
@@ -721,7 +725,7 @@ void runSimulation(int seconds) {
                     char* key = intToCharPtr(id);
                     char* value = intToCharPtr((timeSinceStart-drone.getChargingTimestamp())*100/(chargeCompleteAt[i]-drone.getChargingTimestamp()));
                     addEntry(ptrToRedisContext, rechargingDroneStream, key, value);
-                    dronesAreCharging = true;
+                    chargingDrones++;
                 }
             }
 
@@ -743,6 +747,8 @@ void runSimulation(int seconds) {
             add_row(conninfo, pointCoverageTable, pctCols, pctValues, 2);
             const char* ddtValues[] = {(intToCharPtr(epoch)), (intToCharPtr(deadDrones.size()))};
             add_row(conninfo, deadDronesTable, ddtCols, ddtValues, 2);
+            const char* rdtValues[] = {(intToCharPtr(epoch)), (intToCharPtr(chargingDrones))};
+            add_row(conninfo, rechargingDronesTable, rdtCols, rdtValues, 2);
             
             std::cout << "Time since simulation start:\t" << (timeSinceStart) / 36000 << " hours\t" << ((timeSinceStart) % 36000) / 600 << " minutes\t" << std::endl;
 
@@ -754,7 +760,7 @@ void runSimulation(int seconds) {
             deadDronesMonitor(ptrToRedisContext);
 
             deadDrones = {};
-            dronesAreCharging = false;
+            chargingDrones = 0;
             dronesEnteredCharging = false;
 
             std::cout << "\n\n" << std::endl;
