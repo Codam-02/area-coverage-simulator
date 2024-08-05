@@ -318,6 +318,25 @@ int randomRechargingTime() {
     return rechargingTime;
 }
 
+char* timestampToString(int t) {
+    int total_seconds = t / 10;
+    int hours = total_seconds / 3600;
+    int minutes = (total_seconds % 3600) / 60;
+    int seconds = total_seconds % 60;
+    
+    // Create a temporary string with the formatted output
+    char temp[50];  // large enough buffer to hold the formatted string
+    snprintf(temp, sizeof(temp), "%dh %dm %ds", hours, minutes, seconds);
+    
+    // Allocate memory for the string
+    char* str = (char*)malloc((strlen(temp) + 1) * sizeof(char));
+    if (str != nullptr) {
+        strcpy(str, temp);
+    }
+    
+    return str;
+}
+
 //This function takes two point-coordinates as arguments and returns the time to travel from one to another at 30Km/h (in tenths of second)
 int timeToTravel(int x, int y, int x1, int y1) {
 
@@ -551,6 +570,10 @@ void runSimulation(int seconds) {
     const char* pctCols[] = {"epoch", "output"};
     create_table(conninfo, pointCoverageTable, pctCols, 2);
 
+    const char* rechargingTimersTable = "rtt";
+    const char* rttCols[] = {"droneId", "epoch", "timer"};
+    create_table(conninfo, rechargingTimersTable, rttCols, 3);
+
     const char* hostname = "127.0.0.1";  // Localhost IP address
     int port = 6379;                    // Default Redis port
 
@@ -678,9 +701,13 @@ void runSimulation(int seconds) {
             int movementTime = drone.move(timeSinceStart);
             drone.verify(&pointIsVerified);
 
+            //handles drones entering charging-mode this timestamp
             if (!drone.isActive()) {
-                int chargingTimestamp = timeSinceStart + randomRechargingTime();
+                int chargingTimer = randomRechargingTime();
+                int chargingTimestamp = timeSinceStart + chargingTimer;
                 addEntry(ptrToRedisContext, rechargingTimersStream, intToCharPtr(drone.getId()), intToCharPtr(chargingTimestamp - timeSinceStart));
+                const char* rttValues[] = {intToCharPtr(drone.getId()), intToCharPtr(epoch), timestampToString(chargingTimer)};
+                add_row(conninfo, rechargingTimersTable, rttCols, rttValues, 3);
                 dronesDoneCharging[chargingTimestamp].insert(droneIndex);
                 chargeCompleteAt[droneIndex] = chargingTimestamp;
                 dronesEnteredCharging = true;
