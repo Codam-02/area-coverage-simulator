@@ -10,6 +10,7 @@ To compile the project, use the following command:
 
 ```bash
 g++ -o output_name main.cpp
+```
 
 ## Running the Application
 
@@ -17,3 +18,4 @@ Once the program is compiled, you can run it using the following command:
 
 ```bash
 ./output_name
+```
